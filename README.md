@@ -1,52 +1,12 @@
-# Android Microphone Streaming
+# Quran text detection from voice
 
-Android demo application that streams audio from the microphone to deepspeech and transcribes it.
 
-## Prerequisites
+## How to train models
 
-#### Download model
-
-Download the pre-trained English model and extract it:
-```
-curl -LO https://github.com/mozilla/DeepSpeech/releases/download/v0.9.3/deepspeech-0.9.3-models.tflite
-curl -LO https://github.com/mozilla/DeepSpeech/releases/download/v0.9.3/deepspeech-0.9.3-models.scorer
-```
-
-Move the model files `deepspeech-0.9.3-models.pbmm`, `deepspeech-0.9.3-models.scorer`, to the demo application's data directory on your android device.
-Mind that the data directory will only be present after installing and launching the app once.
-
-```
-adb push deepspeech-0.9.3-models.tflite deepspeech-0.9.3-models.scorer /storage/emulated/0/Android/data/org.deepspeechdemo/files/
-```
-
-You can also copy the files from your file browser to the device.
-
-#### Android device with USB Debugging
-
-Connect an android device and make sure to enable USB-Debugging in the developer settings of the device. If haven't already, you can activate your developer settings by following [this guide from android](https://developer.android.com/studio/debug/dev-options#enable).
-
-## Installation
-
-To install the example app on your connected android device you can either use the command line or Android Studio.
-
-### Command Line
-
-```
-cd android_mic_streaming
-./gradlew installDebug
-``` 
-
-### Android Studio
-
-Open the `android_mic_streaming` directory in Android Studio.  
-Run the app and your connected android device.
-
-## Usage
-
-Start recording by pressing the button and the app will transcribe the spoken text.
-
-## Fine-tuning the Recognition
-
-Based on your use case or the language you are using you might change the values of `BEAM_WIDTH`, `LM_ALPHA` and `LM_BETA` to improve the speech recogintion. 
-
-You can also alter the `NUM_BUFFER_ELEMENTS` to change the size of the audio data buffer that is fed into the model. 
+1. Download and install **git-lfs** from [here](https://docs.github.com/en/github/managing-large-files/installing-git-large-file-storage)
+2. `git clone https://github.com/tarekeldeeb/DeepSpeech-Quran.git`
+3. `git lfs pull`
+4. Generate csv files using `bin/import_quran.py` & `bin/import_quran_tusers.py`
+5. Mix the CSV files generated. (Did it manually, for now, could be automated)
+6. Increase **--epochs** time on this file `bin/run-quran.sh`, if you want more accuracy(It will need more time to train if **--epochs** are higher, currently, it's **30**)
+6. Execute `bin/run-quran.sh` and `bin/run-quran-tusers.sh`
