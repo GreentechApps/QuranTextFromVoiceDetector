@@ -8,6 +8,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -29,6 +30,9 @@ class MainActivity : AppCompatActivity() {
     private val TFLITE_MODEL_FILENAME = "output_graph_imams_tusers_v2.tflite"
     private val SCORER_FILENAME = "quran.scorer"
 
+    private val ayah = "ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ"
+    private var detectableWords = ArrayList<Word>()
+
     private fun checkAudioPermission() {
         // Permission is automatically granted on SDK < 23 upon installation.
         if (Build.VERSION.SDK_INT >= 23) {
@@ -40,10 +44,57 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        checkAudioPermission()
+        generateDetectableText()
+        // Create application data directory on the device
+        //val modelsPath = getExternalFilesDir(null).toString()
+        //status.text = "Ready. Copy model files to \"$modelsPath\" if running for the first time.\n"
+    }
+
+    private fun generateDetectableText(){
+        val array = ayah.split(" ") //Array(ayah.length) {ayah[it].toString()}.reversed()
+        array.forEachIndexed {index, element ->
+            val word = Word(index,element,false);
+            detectableWords.add(word)
+        }
+    }
+
+    private fun detectWord(text: String) : Boolean{
+        if(text.isBlank() || text.isEmpty()){
+            return false
+        }
+        Log.d("LISTNER",text)
+        detectableWords.forEachIndexed{ index, element ->
+            Log.d("LISTNER","2 ${element.index} ${element.text} ${element.isDetected}")
+            if(!element.isDetected  ){
+                val detected = ayah.split(" ")
+                detected.forEachIndexed { detectedIndex, detectedElement ->
+                    if(element.text.contains(detectedElement)) {
+                        Log.d("LISTNER", "3 ${element.text} : ${text}")
+                        detectableWords[index].isDetected = true
+                    }
+                }
+
+            }
+        }
+
+        var sentence = ""
+        detectableWords.filter {value -> value.isDetected}.forEach {
+            sentence += it.text + " "
+        }
+        detection.text = sentence
+
+        return false
+    }
+
+
     private fun transcribe() {
         // We read from the recorder in chunks of 2048 shorts. With a model that expects its input
-        // at 16000Hz, this corresponds to 2048/16000 = 0.128s or 128ms.
-        val audioBufferSize = 2048
+        // at 16000Hz, this corresponds to  2048/16000 = 0.128s or 128ms.
+        val audioBufferSize = 20048
         val audioData = ShortArray(audioBufferSize)
 
         runOnUiThread { btnStartInference.text = "Stop Recording" }
@@ -52,11 +103,11 @@ class MainActivity : AppCompatActivity() {
             val streamContext = model.createStream()
 
             val recorder = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                model.sampleRate(),
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                audioBufferSize
+                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                    model.sampleRate(),
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    audioBufferSize
             )
             recorder.startRecording()
 
@@ -64,18 +115,22 @@ class MainActivity : AppCompatActivity() {
                 recorder.read(audioData, 0, audioBufferSize)
                 model.feedAudioContent(streamContext, audioData, audioData.size)
                 val decoded = model.intermediateDecode(streamContext)
-                runOnUiThread { transcription.text = decoded }
+
+                runOnUiThread {
+                    detectWord(decoded)
+                    transcription.text = decoded
+                }
             }
 
             val decoded = model.finishStream(streamContext)
+               runOnUiThread {
+                   btnStartInference.text = "Start Recording"
+                   transcription.text = decoded
+               }
 
-            runOnUiThread {
-                btnStartInference.text = "Start Recording"
-                transcription.text = decoded
-            }
+               recorder.stop()
+               recorder.release()
 
-            recorder.stop()
-            recorder.release()
         }
     }
 
@@ -119,7 +174,7 @@ class MainActivity : AppCompatActivity() {
 
         for (path in listOf(tfliteModelPath, scorerPath)) {
             if (!File(path).exists()) {
-                status.append("Model creation failed: $path does not exist.\n")
+                detection.append("Model creation failed: $path does not exist.\n")
                 return false
             }
         }
@@ -137,19 +192,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-        checkAudioPermission()
-
-        // Create application data directory on the device
-        val modelsPath = getExternalFilesDir(null).toString()
-
-        status.text = "Ready. Copy model files to \"$modelsPath\" if running for the first time.\n"
-    }
-
     private fun stopListening() {
         isRecording.set(false)
+    }
+
+    fun onClear(v: View?) {
+        stopListening()
+        detectableWords.forEachIndexed{ index,element ->
+            detectableWords[index].isDetected = false
+        }
+        detection.text = ""
     }
 
     fun onRecordClick(v: View?) {
@@ -157,7 +209,6 @@ class MainActivity : AppCompatActivity() {
             if (!createModel()) {
                 return
             }
-            status.append("Created model.\n")
         }
 
         if (isRecording.get()) {
