@@ -30,8 +30,8 @@ class MainActivity : AppCompatActivity() {
     private val TFLITE_MODEL_FILENAME = "output_graph_imams_tusers_v2.tflite"
     private val SCORER_FILENAME = "quran.scorer"
 
-    private val ayah = "ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ"
-    private var detectableWords = ArrayList<Word>()
+    private var detectableAyahList = ArrayList<DetectableAyah>()
+    private var detectingText = ""
 
     private fun checkAudioPermission() {
         // Permission is automatically granted on SDK < 23 upon installation.
@@ -48,53 +48,78 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         checkAudioPermission()
-        generateDetectableText()
-        // Create application data directory on the device
-        //val modelsPath = getExternalFilesDir(null).toString()
-        //status.text = "Ready. Copy model files to \"$modelsPath\" if running for the first time.\n"
+        generateDetectable()
     }
 
-    private fun generateDetectableText(){
-        val array = ayah.split(" ") //Array(ayah.length) {ayah[it].toString()}.reversed()
-        array.forEachIndexed {index, element ->
-            val word = Word(index,element,false);
-            detectableWords.add(word)
-        }
-    }
+    private fun generateDetectable(){
+        detectableAyahList.clear()
+        val ayahs = arrayOf(
+                QuranAyah(1,1,"بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِِ"),
+                QuranAyah(1,2,"ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَٰلَمِينََِ"),
+                QuranAyah(1,3,"ٱلرَّحْمَٰنِ ٱلرَّحِيمِِ"),
+                QuranAyah(1,4,"مَٰلِكِ يَوْمِ ٱلدِّينِ"),
+                QuranAyah(1,5,"إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ"),
+                QuranAyah(1,6,"ٱهْدِنَا ٱلصِّرَٰطَ ٱلْمُسْتَقِيمََ"),
+                QuranAyah(1,7,"صِرَٰطَ ٱلَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ ٱلْمَغْضُوبِ عَلَيْهِمْ وَلَا ٱلضَّآلِّينَ"))
 
-    private fun detectWord(text: String) : Boolean{
-        if(text.isBlank() || text.isEmpty()){
-            return false
-        }
-        Log.d("LISTNER",text)
-        detectableWords.forEachIndexed{ index, element ->
-            Log.d("LISTNER","2 ${element.index} ${element.text} ${element.isDetected}")
-            if(!element.isDetected  ){
-                val detected = ayah.split(" ")
-                detected.forEachIndexed { detectedIndex, detectedElement ->
-                    if(element.text.contains(detectedElement)) {
-                        Log.d("LISTNER", "3 ${element.text} : ${text}")
-                        detectableWords[index].isDetected = true
-                    }
-                }
 
+        ayahs.forEachIndexed { index, ayah ->
+            val texts = ayah.text.split(" ")
+            val words: ArrayList<DetectableWord> = ArrayList()
+            texts.forEachIndexed {textIndex, text ->
+                val word = DetectableWord(id = textIndex + 1,index = textIndex,ayahId = ayah.ayahId,suraId = ayah.suraId,text = text,isDetected = false)
+                words.add(word)
             }
+
+            val detectableAyah  = DetectableAyah(index = index,ayahId = ayah.ayahId,suraId = ayah.suraId,text = ayah.text,isDetected = false,words = words)
+            detectableAyahList.add(detectableAyah)
+        }
+
+    }
+
+    private fun detectWord(detectableText: String) {
+        Log.d("LISTNER","0 ${detectableText} : ${detectingText} : ${detectableText == detectingText}")
+
+        if( detectableText.isBlank() || detectableText.isEmpty() || detectableText == detectingText){
+            return
+        }
+        detectingText = detectableText
+        Log.d("LISTNER",detectableText)
+
+        detectableAyahList.firstOrNull {  ayah ->  !ayah.isDetected}?.let { ayah ->
+
+            ayah.words.firstOrNull{word -> !word.isDetected}?.let { word ->
+                val detectedTexts = detectableText.split(" ").filter { it.isNotEmpty() }
+                Log.d("LISTNER","2 ${word.isDetected} : ${word.text}")
+
+                detectedTexts.firstOrNull { text -> word.text.contains(text) && text.isNotEmpty()}?.let {
+                    Log.d("LISTNER","3 ${word.isDetected} : ${word.text} : ${it} ${it.isNotBlank()} ${it.isEmpty()}")
+
+                    detectableAyahList[ayah.index].words[word.index].isDetected = true
+                }
+            }
+
+            if(ayah.words.none { detectableWord -> !detectableWord.isDetected }){
+                detectableAyahList[ayah.index].isDetected = true
+            }
+
         }
 
         var sentence = ""
-        detectableWords.filter {value -> value.isDetected}.forEach {
-            sentence += it.text + " "
+        detectableAyahList.forEach {  detectableAyah ->
+            detectableAyah.words.filter {value -> value.isDetected}.forEach {
+                sentence += it.text + " "
+            }
         }
-        detection.text = sentence
 
-        return false
+        detection.text = sentence
     }
 
 
     private fun transcribe() {
         // We read from the recorder in chunks of 2048 shorts. With a model that expects its input
         // at 16000Hz, this corresponds to  2048/16000 = 0.128s or 128ms.
-        val audioBufferSize = 20048
+        val audioBufferSize = 2048
         val audioData = ShortArray(audioBufferSize)
 
         runOnUiThread { btnStartInference.text = "Stop Recording" }
@@ -117,6 +142,7 @@ class MainActivity : AppCompatActivity() {
                 val decoded = model.intermediateDecode(streamContext)
 
                 runOnUiThread {
+
                     detectWord(decoded)
                     transcription.text = decoded
                 }
@@ -174,7 +200,6 @@ class MainActivity : AppCompatActivity() {
 
         for (path in listOf(tfliteModelPath, scorerPath)) {
             if (!File(path).exists()) {
-                detection.append("Model creation failed: $path does not exist.\n")
                 return false
             }
         }
@@ -194,12 +219,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun stopListening() {
         isRecording.set(false)
+        detectingText = ""
     }
 
     fun onClear(v: View?) {
         stopListening()
-        detectableWords.forEachIndexed{ index,element ->
-            detectableWords[index].isDetected = false
+        detectableAyahList.forEachIndexed{ ayahIndex,ayah ->
+            ayah.words.forEachIndexed { wordIndex,word ->
+                detectableAyahList[ayah.index].words[word.index].isDetected = false
+            }
+            detectableAyahList[ayah.index].isDetected = false
         }
         detection.text = ""
     }
